@@ -1,10 +1,13 @@
-(ns relation-extraction.dipre)
+(ns relation-extraction.dipre
+  (:require [clojure.string :as s]))
 
 (def test-corpus
   (str "<b>John Hemingway</b> wrote <b>Of Mice and Men</b>. "
        "before <b>John Hemingway</b> wrote <b>Of Mice and Men</b>. "
        "<b>Mark Twain</b> wrote <b>Huckleberry Finn</b>. "
+       "when <b>Mark Twain</b> was writing <b>Huckleberry Finn</b>. "
        "<b>Huckleberry Finn</b>, written by <b>Mark Twain</b>, ."
+       "when <b>Dan Brown</b> was writing <b>The Da Vinci Code</b>. "
        "<b>The Stranger</b>, written by <b>Albert Camus</b>, ."))
 
 (def test-seeds
@@ -13,7 +16,7 @@
 (def instance-regex
   ;; TODO might be better to anchor regex on the input string (the first
   ;; %s) and search backwards after an actual search is found
-  "(?:[.!?]|^)(.*?)%s([^.!?]+?)%s([^.!?]*)")
+  "(?:[.!?]|^)([^.!?]*?)%s([^.!?]+?)%s([^.!?]*)")
 
 (defn find-instances-for-seed
   "Find instances of the given seed in a corpus. Returns 3-tuples of the form
@@ -85,20 +88,31 @@
                 suffix (find-longest-initial (map #(nth % 2) tuples))]
 
           :when (not (or (empty? prefix) (empty? suffix)))]
-      [prefix middle suffix])))
+      [(s/triml prefix) middle (s/trimr suffix)])))
+
+(def seed-regex
+  "%s([^.!?]+)%s([^.!?]+)%s")
+
+(defn generate-seeds-for-pattern
+  "Draw seeds for the given pattern from a corpus. Returns a collection of
+  pairs of the form ent1, ent2."
+  [corpus pattern]
+
+  (let [pattern-re (re-pattern (apply format seed-regex pattern))]
+    (set (map rest (re-seq pattern-re corpus)))))
 
 (defn generate-seeds
   "Generate new seeds from an improved pattern list and the given corpus."
   [corpus patterns]
-                                        ;; TODO
-  )
+  (mapcat (partial generate-seeds-for-pattern corpus) patterns))
 
-(defn run-first-iteration
+(defn run-iteration
   "Run a single iteration of the DIPRE algorithm given seed relation tuples."
   ;; TODO: shouldn't accept the entire corpus as a string.. :)
+  ;; TODO: uniquify
   [corpus seeds]
 
   (let [instances (find-instances corpus seeds)
         patterns (find-patterns instances)
         seeds (generate-seeds corpus patterns)]
-    patterns))
+    seeds))
